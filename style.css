@@ -10,3 +10,4 @@ input[type=search],input[type=text],select{width:100%;padding:.6rem;border:1px s
 .mean{font-size:1.1rem;margin-top:.3rem}.mean.h{filter:blur(8px);cursor:pointer}.row{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:.5rem 0}.row>*{flex:1}.row .n{flex:0}
 .bar{height:8px;background:var(--bd);border-radius:6px;overflow:hidden}.bar i{display:block;height:100%;background:var(--pri)}.on{color:var(--pri)}
 dialog{border:1px solid var(--bd);border-radius:14px;background:var(--card);color:var(--fg);max-width:420px;width:92%}dialog button{display:block;width:100%;margin:.3rem 0}
+header button{color:var(--fg)}

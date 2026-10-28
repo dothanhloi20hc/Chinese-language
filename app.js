@@ -11,7 +11,8 @@ function validate(arr){const ok=[],bad=[],ids=new Set();(Array.isArray(arr)?arr:
  if(!r.id)return bad.push(w+': thiếu id');if(ids.has(r.id))return bad.push(w+': ID trùng '+r.id);
  const m=REQ.filter(k=>!String(r[k]??'').trim());if(m.length)return bad.push(w+' ('+r.id+'): thiếu '+m.join(', '));
  ids.add(r.id);ok.push({id:r.id,hanzi:r.hanzi,han_viet:r.han_viet||'',pinyin:r.pinyin,meaning_vi:r.meaning_vi})});return{ok,bad}}
-async function load(){const base=await (await fetch('data/sentences.json')).json(),extra=await kv('extra')||[];
+async function load(){let base=[];try{const r=await fetch('data/sentences.json');if(r.ok){const j=await r.json();if(Array.isArray(j))base=j}}catch{}
+ const extra=await kv('extra')||[];
  S=[...new Map([...base,...extra].map(s=>[s.id,s])).values()].sort((a,b)=>a.id<b.id?-1:1);M=new Map(S.map(s=>[s.id,s]));
  U=Object.assign(blank(),await kv('user')||{})}
 const shuffle=a=>{a=[...a];for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a};
@@ -107,16 +108,22 @@ window.clearS=async()=>{if(confirm('Xóa toàn bộ câu đã nhập? Tiến đ�
 
 const DEF_URL='https://docs.google.com/spreadsheets/d/1NvX9gIOxMZ_oPOuPjwksPSPIJuIDOESUiQGiQwK9T8M/edit?gid=451397321#gid=451397321';
 async function renderSync(){const cfg=await kv('cfg')||{},meta=await kv('meta'),url=cfg.url||DEF_URL;
- $('#sync').innerHTML=`<div class="card"><b>🔄 Cập nhật dữ liệu từ Google Sheet</b><p class="mut">Tải bản dữ liệu mới nhất do người quản lý cập nhật. Yêu thích, nhóm, tiến độ của bạn được giữ nguyên.</p><p>${meta?`Cập nhật gần nhất: <b>${new Date(meta.at).toLocaleString('vi-VN')}</b> · ${meta.count} câu`:'Chưa cập nhật lần nào.'}</p><div class="row"><button class="p" onclick="syncSheet()">🔄 Cập nhật ngay</button></div><details><summary class="mut">Nguồn dữ liệu</summary><input type="text" id="surl" value="${esc(url)}"><button onclick="saveUrl()">Lưu nguồn</button></details><div id="srep"></div></div>`}
+ $('#sync').innerHTML=`<div class="card"><b>🔄 Cập nhật dữ liệu từ Google Sheet</b>${location.protocol==='file:'?'<p>⚠ Bạn đang mở file trực tiếp từ máy. Nên dùng link GitHub Pages để app chạy đầy đủ (cài đặt, offline).</p>':''}<p class="mut">Tải bản dữ liệu mới nhất do người quản lý cập nhật. Yêu thích, nhóm, tiến độ của bạn được giữ nguyên.</p><p>${meta?`Cập nhật gần nhất: <b>${new Date(meta.at).toLocaleString('vi-VN')}</b> · ${meta.count} câu`:'Chưa cập nhật lần nào.'}</p><div class="row"><button class="p" onclick="syncSheet()">🔄 Cập nhật ngay</button></div><details><summary class="mut">Nguồn dữ liệu</summary><input type="text" id="surl" value="${esc(url)}"><button onclick="saveUrl()">Lưu nguồn</button></details><div id="srep"></div></div>`}
 window.saveUrl=async()=>{await kv('cfg',{url:$('#surl').value.trim()||DEF_URL});alert('Đã lưu nguồn.')};
+function gviz(id,gid){return new Promise((ok,no)=>{const cb='__gv'+Date.now(),s=document.createElement('script');
+ const fin=()=>{clearTimeout(t);s.remove();delete window[cb]},t=setTimeout(()=>{fin();no(Error('hết thời gian chờ, có thể sheet chưa chia sẻ công khai'))},15000);
+ window[cb]=j=>{fin();if(j.status!=='ok')return no(Error((j.errors&&j.errors[0]&&(j.errors[0].detailed_message||j.errors[0].message))||'Google từ chối truy cập'));
+  const T=j.table;ok([T.cols.map(c=>c.label||''),...T.rows.map(r=>(r.c||[]).map(c=>c&&c.v!=null?c.v:''))])};
+ s.onerror=()=>{fin();no(Error('không kết nối được tới Google'))};
+ s.src='https://docs.google.com/spreadsheets/d/'+id+'/gviz/tq?tqx=out:json;responseHandler:'+cb+'&headers=1&gid='+gid;document.head.appendChild(s)})}
 window.syncSheet=async()=>{const say=h=>{const e=$('#srep');e?e.innerHTML=h:alert(h.replace(/<[^>]+>/g,''))};
  const cfg=await kv('cfg')||{},url=cfg.url||DEF_URL,id=(url.match(/\/d\/([\w-]+)/)||[])[1],gid=(url.match(/gid=(\d+)/)||[])[1]||'0';
  if(!id)return say('Link Google Sheet không hợp lệ.');
  if(!navigator.onLine)return say('Không có Internet. Bạn vẫn học bình thường bằng dữ liệu đã tải.');
- say('Đang tải dữ liệu…');const base='https://docs.google.com/spreadsheets/d/'+id;let txt,err;
- for(const u of[base+'/gviz/tq?tqx=out:csv&headers=1&gid='+gid,base+'/export?format=csv&gid='+gid]){try{const r=await fetch(u,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const t=await r.text();if(/^\s*<(!doctype|html)/i.test(t))throw Error('sheet chưa chia sẻ công khai');txt=t;break}catch(e){err=e}}
- if(!txt)return say(`❌ Không tải được (${esc(err?.message)}). Kiểm tra: có Internet; Google Sheet đã chia sẻ "Bất kỳ ai có đường liên kết đều xem được".`);
- let res;try{const wb=XLSX.read(txt,{type:'string',raw:true});res=fromRows(XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''}))}catch(e){return say('❌ Không đọc được dữ liệu: '+esc(e.message))}
+ say('Đang tải dữ liệu… (tối đa ~15 giây)');const base='https://docs.google.com/spreadsheets/d/'+id;let rows,err;
+ try{rows=await gviz(id,gid)}catch(e1){err=e1;try{const r=await fetch(base+'/export?format=csv&gid='+gid,{cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);const t=await r.text();if(/^\s*<(!doctype|html)/i.test(t))throw Error('sheet chưa chia sẻ công khai');const wb=XLSX.read(t,{type:'string',raw:true});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''})}catch(e2){err=e1}}
+ if(!rows)return say(`❌ Không tải được (${esc(err?.message)}).<br>Kiểm tra: (1) có Internet; (2) Google Sheet đã chia sẻ "Bất kỳ ai có đường liên kết" → quyền "Người xem"; (3) đúng link/tab. Cách tạm thời: tải sheet về máy dạng .xlsx rồi bấm "Chọn file…" ở trên.`);
+ const res=fromRows(rows);
  const{ok,bad}=res;if(!ok.length)return say('❌ Không có dòng hợp lệ, dữ liệu hiện tại được giữ nguyên.'+(bad[0]?'<br>'+esc(bad[0]):''));
  const ex=await kv('extra')||[];if(ex.length>20&&ok.length<ex.length*.5&&!confirm('Bản mới chỉ có '+ok.length+' câu, ít hơn nhiều so với hiện tại ('+ex.length+'). Vẫn cập nhật?'))return say('Đã hủy, dữ liệu giữ nguyên.');
  const old=new Map(ex.map(s=>[s.id,s])),nid=new Set(ok.map(s=>s.id));let nw=0,up=0;ok.forEach(s=>{const o=old.get(s.id);o?(JSON.stringify(o)!==JSON.stringify(s)&&up++):nw++});const rm=ex.filter(s=>!nid.has(s.id)).length;
